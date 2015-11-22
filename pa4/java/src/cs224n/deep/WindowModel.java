@@ -5,29 +5,38 @@ import java.util.*;
 import org.ejml.data.*;
 import org.ejml.simple.*;
 
-
 import java.text.*;
 
 public class WindowModel {
 
-	protected SimpleMatrix L, W, Wout;
+	protected SimpleMatrix L, W, U;
 	//
-	public int windowSize,wordSize, hiddenSize;
+	protected int windowSize,wordSize, hiddenSize, outputNodes;
+	protected double lr;
 
 	public WindowModel(int _windowSize, int _hiddenSize, double _lr){
 		//TODO
+		windowSize = _windowSize;
+		hiddenSize = _hiddenSize;
+		wordSize = 50; // 50 dim word vector
+		outputNodes = 5; // number of NER outputs
+		lr = _lr;
+	}
+	
+	private SimpleMatrix initRandom(int rows, int cols) {
+		double eInit = Math.sqrt(6.0) / Math.sqrt(cols + rows);// fanIn = cols, fanOut = rows
+		return SimpleMatrix.random(rows, cols, -eInit, eInit, new Random());
 	}
 
 	/**
 	 * Initializes the weights randomly. 
 	 */
 	public void initWeights(){
-		//TODO
 		// initialize with bias inside as the last column
 	        // or separately
-		// W = SimpleMatrix...
-		// U for the score
-		// U = SimpleMatrix...
+		W = initRandom(hiddenSize, windowSize*wordSize + 1); // first column is bias
+		U = initRandom(outputNodes, hiddenSize+1); // first column is bias
+		
 	}
 
 
