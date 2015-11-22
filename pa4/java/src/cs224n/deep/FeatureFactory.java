@@ -55,12 +55,14 @@ public class FeatureFactory {
 	static SimpleMatrix allVecs; //access it directly in WindowModel
 	public static SimpleMatrix readWordVectors(String vecFilename) throws IOException {
 		if (allVecs!=null) return allVecs;
-		//TODO implement this
 		//set allVecs from filename
 		BufferedReader br = new BufferedReader(new FileReader(vecFilename));
 		String line = null;
 		List<String[]> vecList = new ArrayList<String[]>();
 		while ((line = br.readLine()) != null) {
+			if (line.trim().length() == 0) {
+                continue;
+			}
 			String[] vectors = line.split("\\s+");
 			vecList.add(vectors);
 		}
@@ -81,7 +83,6 @@ public class FeatureFactory {
 	public static HashMap<Integer, String> numToWord = new HashMap<Integer, String>();
 
 	public static HashMap<String, Integer> initializeVocab(String vocabFilename) throws IOException {
-		//TODO: create this
 		BufferedReader br = new BufferedReader(new FileReader(vocabFilename));
 		String line = null;
 		int num = 0;
