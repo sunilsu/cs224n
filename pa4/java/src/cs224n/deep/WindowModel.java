@@ -38,18 +38,28 @@ public class WindowModel {
 		U = initRandom(outputNodes, hiddenSize+1); // first column is bias
 		
 	}
+	
+	public List<String> getLabels(List<Datum> sentence) {
+		List<String> labels = new ArrayList<String>();
+		for (Datum datum: sentence) {
+			labels.add(datum.label);
+		}
+		return labels;
+	}
 	/**
 	 * 
-	 * @param words List of words in a sentence that needs to be padded
+	 * @param sentence List of words in a sentence that needs to be padded
 	 * @return List of padded words
 	 */
-	public List<String> pad(List<String> words) {
+	public List<String> pad(List<Datum> sentence) {
 		List<String> padded = new ArrayList<String>();
 		int padLen = windowSize / 2;
 		for (int i=0; i<padLen; i++) {
 			padded.add("<s>");
 		}
-		padded.addAll(words);
+		for (Datum datum: sentence) {
+			padded.add(datum.word);
+		}
 		for (int i=0; i<padLen; i++) {
 			padded.add("</s>");
 		}
@@ -57,16 +67,16 @@ public class WindowModel {
 	}
 	/**
 	 * 
-	 * @param paddedWords List of padded words in a sentence
+	 * @param paddedSentence List of padded words in a sentence
 	 * @return List of a windowed words, each window is a List of words
 	 */
-	public List<List<String>> window(List<String> paddedWords) {
+	public List<List<String>> window(List<String> paddedSentence) {
 		List<List<String>> windows = new ArrayList<List<String>>();
 		int padLen = windowSize / 2;
-		for (int index = padLen; index < (paddedWords.size()-padLen); index++) {
+		for (int index = padLen; index < (paddedSentence.size()-padLen); index++) {
 			List<String> window = new ArrayList<String>();
 			for (int offset = -padLen; offset <= padLen; offset++) {
-				window.add(paddedWords.get(index+offset));
+				window.add(paddedSentence.get(index+offset));
 			}
 			windows.add(window);
 		}
@@ -82,11 +92,11 @@ public class WindowModel {
 		int row = 0;
 		X.set(row++, 0, 1.0);
 		for (String word : window) {
-			int index = FeatureFactory.wordToNum.get(word);
+			int index = FeatureFactory.wordToNum.get(word.toLowerCase());
 			SimpleMatrix wordVec = FeatureFactory.allVecs.extractVector(false,
 					index); // extract column vector at row=index
 			X.insertIntoThis(row, 0, wordVec);
-			row += wordVec.getNumElements(); // increment row to pint to next
+			row += wordVec.getNumElements(); // increment row to point to next
 												// slot to insert
 		}
 		return X;

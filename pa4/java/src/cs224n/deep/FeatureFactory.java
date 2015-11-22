@@ -50,7 +50,6 @@ public class FeatureFactory {
 		return data;
 	}
  
- 
 	// Look up table matrix with all word vectors as defined in lecture with dimensionality n x |V|
 	static SimpleMatrix allVecs; //access it directly in WindowModel
 	public static SimpleMatrix readWordVectors(String vecFilename) throws IOException {
