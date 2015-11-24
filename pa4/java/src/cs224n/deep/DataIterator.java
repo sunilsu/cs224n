@@ -59,5 +59,13 @@ public class DataIterator implements Iterator<List<Datum>> {
 		}
 		return sentences;
 	}
+	
+	public List<List<Datum>> getSentences() {
+		List<List<Datum>> sentences = new ArrayList<List<Datum>>();
+		while (hasNext()) {
+			sentences.add(next());
+		}
+		return sentences;
+	}
 
 }

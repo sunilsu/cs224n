@@ -10,6 +10,8 @@ import org.ejml.simple.*;
 
 public class FeatureFactory {
 
+	private static String START = "<s>";
+	private static String END = "</s>";
 
 	private FeatureFactory() {
 
@@ -34,9 +36,13 @@ public class FeatureFactory {
 			throws FileNotFoundException, IOException {
 	    // TODO: you'd want to handle sentence boundaries
 		List<Datum> data = new ArrayList<Datum>();
+		data.add(new Datum(START, "O"));
 		BufferedReader in = new BufferedReader(new FileReader(filename));
 		for (String line = in.readLine(); line != null; line = in.readLine()) {
 			if (line.trim().length() == 0) {
+				// end of sentence
+				data.add(new Datum(END, "O"));
+				data.add(new Datum(START, "O"));
 				continue;
 			}
 			String[] bits = line.split("\\s+");
