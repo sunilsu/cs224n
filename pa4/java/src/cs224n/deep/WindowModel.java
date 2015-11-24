@@ -262,7 +262,6 @@ public class WindowModel {
 			SimpleMatrix dJdW = delta1.mult(X.transpose());
 			//
 			SimpleMatrix dJdX = W.transpose().mult(delta1);
-			dJdX = dJdX.extractMatrix(1, SimpleMatrix.END, 0, SimpleMatrix.END); // remove row 0 
 			// update weights
 			U = U.minus(dJdU.scale(lr));
 			W = W.minus(dJdW.scale(lr));
