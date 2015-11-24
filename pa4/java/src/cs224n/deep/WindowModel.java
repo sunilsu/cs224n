@@ -46,6 +46,11 @@ public class WindowModel {
 		//TODO: should bias coulumn be set to 0 ??
 		W = initRandom(hiddenSize, windowSize*wordSize + 1); // first column is bias
 		U = initRandom(outputNodes, hiddenSize+1); // first column is bias
+		// change bias columns to 0
+		double[] zeros = new double[W.numRows()];
+		W.setColumn(0, 0, zeros);
+		zeros = new double[U.numRows()];
+		U.setColumn(0, 0, zeros);
 		
 	}
 	
@@ -129,6 +134,26 @@ public class WindowModel {
 	}
 	/**
 	 * 
+	 * @param window input words in the window
+	 * @param X updated word Vector for the words in window
+	 * updates the allVecs vector with these word vectors
+	 */
+	public void updateWordVecInLookup(List<String> window, SimpleMatrix X) {
+		for (int i=0; i< window.size(); i++) {
+			String word = window.get(i);
+			// get the wordVec for this word in X
+			SimpleMatrix wordVec = X.extractMatrix(1+wordSize*i, 1+wordSize*(i+1), 0, 1);
+			String key = word.toLowerCase();
+			if (!FeatureFactory.wordToNum.containsKey(key)) {
+				key = "UUUNKKK";
+			}
+			int index = FeatureFactory.wordToNum.get(key);
+			// update allVecs matrix for this word
+			FeatureFactory.allVecs.insertIntoThis(0, index, wordVec);
+		}
+	}
+	/**
+	 * 
 	 * @param mat
 	 * @return tanh of elements of mat
 	 */
@@ -193,6 +218,14 @@ public class WindowModel {
 		SimpleMatrix a = extendVector(a1);
 		return softmax(U.mult(a));		
 	}
+	
+	public double logLoss(SimpleMatrix Y, SimpleMatrix p) {
+		double loss = 0.0;
+		for (int i=0; i<Y.numRows(); i++) {
+			loss -= Y.get(i, 0) * Math.log(p.get(i, 0));
+		}
+		return loss;
+	}
 
 
 	/**
@@ -216,6 +249,8 @@ public class WindowModel {
 			// feed forward
 			SimpleMatrix a = extendVector(tanh(W.mult(X)));
 			SimpleMatrix p = softmax(U.mult(a));
+			// loss
+			double J = logLoss(Y, p);
 			// calculate gradients
 			SimpleMatrix delta2 = p.minus(Y);
 			SimpleMatrix dJdU = p.mult(a.transpose());
@@ -228,6 +263,11 @@ public class WindowModel {
 			//
 			SimpleMatrix dJdX = W.transpose().mult(delta1);
 			dJdX = dJdX.extractMatrix(1, SimpleMatrix.END, 0, SimpleMatrix.END); // remove row 0 
+			// update weights
+			U = U.minus(dJdU.scale(lr));
+			W = W.minus(dJdW.scale(lr));
+			X = X.minus(dJdX.scale(lr));
+			updateWordVecInLookup(window, X);
 		}
 
 	}
