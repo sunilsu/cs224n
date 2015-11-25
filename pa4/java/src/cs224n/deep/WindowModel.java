@@ -14,6 +14,7 @@ public class WindowModel {
 	protected int windowSize,wordSize, hiddenSize, outputNodes;
 	protected double lr;
 	protected static Map<String, Integer> labelToIndex = new HashMap<String, Integer>();
+	private double C = 0.01;
 	
 	static {
 		labelToIndex.put("O", 0);
@@ -226,6 +227,13 @@ public class WindowModel {
 		}
 		return loss;
 	}
+	
+	private SimpleMatrix zeroFirstColumn(SimpleMatrix mat) {
+		SimpleMatrix retMat = mat.copy();
+		double[] zeros = new double[mat.numRows()];
+		retMat.setColumn(0, 0, zeros);
+		return retMat;
+	}
 
 
 	/**
@@ -247,19 +255,22 @@ public class WindowModel {
 			SimpleMatrix Y = getLabelMatrix(labels.get(i));
 			SimpleMatrix X = toInputVector(window);
 			// feed forward
-			SimpleMatrix a = extendVector(tanh(W.mult(X)));
+			SimpleMatrix z1 = W.mult(X);
+			SimpleMatrix a = extendVector(tanh(z1));
 			SimpleMatrix p = softmax(U.mult(a));
 			// loss
 			double J = logLoss(Y, p);
 			// calculate gradients
 			SimpleMatrix delta2 = p.minus(Y);
-			SimpleMatrix dJdU = p.mult(a.transpose());
+			SimpleMatrix rU = zeroFirstColumn(U);
+			SimpleMatrix dJdU = p.mult(a.transpose()).plus(rU.scale(C));
 			// calculate delta1
 			SimpleMatrix delta1 = U.transpose().mult(delta2);
 			delta1 = delta1.extractMatrix(1, SimpleMatrix.END, 0, SimpleMatrix.END); // remove row 0 (bias part)
-			delta1 = tanhPrime(delta1); // dJdZ1
+			delta1 = delta1.elementMult(tanhPrime(z1)); // dJdZ1
 			//
-			SimpleMatrix dJdW = delta1.mult(X.transpose());
+			SimpleMatrix rW = zeroFirstColumn(W);
+			SimpleMatrix dJdW = delta1.mult(X.transpose()).plus(rW.scale(C));;
 			//
 			SimpleMatrix dJdX = W.transpose().mult(delta1);
 			// update weights
