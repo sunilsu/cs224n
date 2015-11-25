@@ -1,4 +1,6 @@
 package cs224n.deep;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.lang.*;
 import java.util.*;
 
@@ -7,14 +9,16 @@ import org.ejml.simple.*;
 
 import java.text.*;
 
-public class WindowModel {
+public class WindowModel implements ObjectiveFunction {
 
 	protected SimpleMatrix L, W, U;
 	//
 	protected int windowSize,wordSize, hiddenSize, outputNodes;
 	protected double lr;
 	protected static Map<String, Integer> labelToIndex = new HashMap<String, Integer>();
-	private double C = 0.01;
+	protected static Map<Integer, String> indexToLabel = new HashMap<Integer, String>();
+	private double C = 0.001;
+	private boolean checkGradient = false;
 	
 	static {
 		labelToIndex.put("O", 0);
@@ -22,15 +26,22 @@ public class WindowModel {
 		labelToIndex.put("MISC", 2);
 		labelToIndex.put("ORG", 3);
 		labelToIndex.put("PER", 4);
+		indexToLabel.put(0, "O");
+		indexToLabel.put(1, "LOC");
+		indexToLabel.put(2, "MISC");
+		indexToLabel.put(3, "ORG");
+		indexToLabel.put(4, "PER");
+
 	}
 	
-	public WindowModel(int _windowSize, int _hiddenSize, double _lr){
+	public WindowModel(int _windowSize, int _hiddenSize, double _lr, double _C){
 		//TODO
 		windowSize = _windowSize; // assuming odd window size
 		hiddenSize = _hiddenSize;
 		wordSize = 50; // 50 dim word vector
 		outputNodes = 5; // number of NER outputs
-		lr = _lr;		
+		lr = _lr;
+		C = _C;
 	}
 	
 	private SimpleMatrix initRandom(int rows, int cols) {
@@ -195,6 +206,7 @@ public class WindowModel {
 				softmaxMat.set(row, col, Math.exp(mat.get(row, col)));
 				sum += softmaxMat.get(row, col);
 			}
+			//System.out.println("sum = " + sum);
 			for (int row=0; row < mat.numRows(); row++) {
 				softmaxMat.set(row, col, softmaxMat.get(row, col) / sum);
 			}
@@ -212,12 +224,32 @@ public class WindowModel {
 		extendedVec.insertIntoThis(1, 0, vec);
 		return extendedVec;
 	}
-
+	/**
+	 * 
+	 * @param X input to NN
+	 * @return output vector of NN from forward pass
+	 */
 	public SimpleMatrix feedForward(SimpleMatrix X) {
-		SimpleMatrix a1 = tanh(W.mult(X));
-		// a1 is a vector, extend by 1 row to account for bias
-		SimpleMatrix a = extendVector(a1);
-		return softmax(U.mult(a));		
+		SimpleMatrix z1 = W.mult(X);
+		SimpleMatrix a = extendVector(tanh(z1));
+		SimpleMatrix p = softmax(U.mult(a));
+		return p;
+	}
+	/**
+	 * 
+	 * @param out output of NN
+	 * @return label corresponding to the max value in out
+	 */
+	public String getOutput(SimpleMatrix out) {
+		double max = -1.0;
+		int index = -1;
+		for (int i=0; i<out.numRows(); i++) {
+			if (out.get(i, 0) > max) {
+				max = out.get(i, 0);
+				index = i;
+			}
+		}
+		return indexToLabel.get(index);
 	}
 	
 	public double logLoss(SimpleMatrix Y, SimpleMatrix p) {
@@ -227,7 +259,11 @@ public class WindowModel {
 		}
 		return loss;
 	}
-	
+	/**
+	 * 
+	 * @param mat weight matrix with bias as first column
+	 * @return matrix with the bias column zeroed out
+	 */
 	private SimpleMatrix zeroFirstColumn(SimpleMatrix mat) {
 		SimpleMatrix retMat = mat.copy();
 		double[] zeros = new double[mat.numRows()];
@@ -247,44 +283,87 @@ public class WindowModel {
 			inputWindows.addAll(window(paddedSentence));
 			labels.addAll(getLabels(sentence));
 		}
-		Random seed = new Random(System.nanoTime());
-		Collections.shuffle(inputWindows, seed);
-		Collections.shuffle(labels, seed);
-		for (int i=0; i<inputWindows.size(); i++) {
-			List<String> window = inputWindows.get(i);
-			SimpleMatrix Y = getLabelMatrix(labels.get(i));
-			SimpleMatrix X = toInputVector(window);
-			// feed forward
-			SimpleMatrix z1 = W.mult(X);
-			SimpleMatrix a = extendVector(tanh(z1));
-			SimpleMatrix p = softmax(U.mult(a));
-			// loss
-			double J = logLoss(Y, p);
-			// calculate gradients
-			SimpleMatrix delta2 = p.minus(Y);
-			SimpleMatrix rU = zeroFirstColumn(U);
-			SimpleMatrix dJdU = p.mult(a.transpose()).plus(rU.scale(C));
-			// calculate delta1
-			SimpleMatrix delta1 = U.transpose().mult(delta2);
-			delta1 = delta1.extractMatrix(1, SimpleMatrix.END, 0, SimpleMatrix.END); // remove row 0 (bias part)
-			delta1 = delta1.elementMult(tanhPrime(z1)); // dJdZ1
-			//
-			SimpleMatrix rW = zeroFirstColumn(W);
-			SimpleMatrix dJdW = delta1.mult(X.transpose()).plus(rW.scale(C));;
-			//
-			SimpleMatrix dJdX = W.transpose().mult(delta1);
-			// update weights
-			U = U.minus(dJdU.scale(lr));
-			W = W.minus(dJdW.scale(lr));
-			X = X.minus(dJdX.scale(lr));
-			updateWordVecInLookup(window, X);
+		for (int epoch=0; epoch<10; epoch++) {
+			System.out.println("Epoch = " + epoch);
+			Random seed = new Random(System.nanoTime());
+			Collections.shuffle(inputWindows, seed);
+			Collections.shuffle(labels, seed);
+			for (int i=0; i<inputWindows.size(); i++) {
+				List<String> window = inputWindows.get(i);
+				SimpleMatrix Y = getLabelMatrix(labels.get(i));
+				SimpleMatrix X = toInputVector(window);
+				// feed forward
+				SimpleMatrix z1 = W.mult(X);
+				SimpleMatrix a = extendVector(tanh(z1));
+				SimpleMatrix p = softmax(U.mult(a));
+				//System.out.println("p = " + p);
+
+				// loss
+				double J = logLoss(Y, p);
+				// calculate gradients
+				SimpleMatrix delta2 = p.minus(Y);
+
+				SimpleMatrix rU = zeroFirstColumn(U);
+				SimpleMatrix dJdU = delta2.mult(a.transpose());
+				dJdU = dJdU.plus(rU.scale(C));
+				// calculate delta1
+				SimpleMatrix delta1 = U.transpose().mult(delta2);
+				delta1 = delta1.extractMatrix(1, SimpleMatrix.END, 0, SimpleMatrix.END); // remove row 0 (bias part)
+				delta1 = delta1.elementMult(tanhPrime(z1)); // dJdZ1
+				//
+				SimpleMatrix rW = zeroFirstColumn(W);
+				SimpleMatrix dJdW = delta1.mult(X.transpose());
+				dJdW = dJdW.plus(rW.scale(C));
+				//
+				SimpleMatrix dJdX = W.transpose().mult(delta1);
+				// ***********************
+				//gradient check
+				if (checkGradient) {
+					List<SimpleMatrix> weights = new ArrayList<SimpleMatrix>();
+					weights.add(U);
+					weights.add(W);
+					weights.add(X);
+					List<SimpleMatrix> matrixDerivatives = new ArrayList<SimpleMatrix>();
+					matrixDerivatives.add(dJdU);
+					matrixDerivatives.add(dJdW);
+					matrixDerivatives.add(dJdX);
+					System.out.println("check: " + 
+							GradientCheck.check(Y, weights, matrixDerivatives, this));
+				}
+				// ************************
+				// update weights
+				U = U.minus(dJdU.scale(lr));
+				W = W.minus(dJdW.scale(lr));
+				X = X.minus(dJdX.scale(lr));
+				updateWordVecInLookup(window, X);
+			}
 		}
 
 	}
 
 	
-	public void test(List<Datum> testData){
-		// TODO
+	public void test(List<List<Datum>> testData) throws IOException {
+		FileWriter fw = new FileWriter("nn1.out");
+		for (List<Datum> sentence : testData) {
+			List<String> paddedSentence = pad(sentence);
+			List<List<String>> windows = window(paddedSentence);
+			for (int i=0; i<windows.size(); i++) {
+				List<String> window = windows.get(i);
+				SimpleMatrix X = toInputVector(window);
+				String label = sentence.get(i).label;
+				String word = sentence.get(i).word;
+				SimpleMatrix p = feedForward(X);
+				String output = getOutput(p);
+				fw.write(word + "\t" + label + "\t" + output + "\n");
+			}
+		}
+		fw.close();
+	}
+
+	@Override
+	public double valueAt(SimpleMatrix label, SimpleMatrix input) {
+		SimpleMatrix p = feedForward(input);
+		return logLoss(label, p);
 	}
 	
 }

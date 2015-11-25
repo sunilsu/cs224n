@@ -75,10 +75,10 @@ public class GradientCheck {
 		    return false;
 		}
 	     else {
-		flops += (w.numRows() + w.numCols());
+		flops += (w.numRows() * w.numCols());
 	    }
 	    error += errFromMatrix(Y, w, dw, objFn, X);
-
+	    //System.out.println("i=" + i + "E= " + error);
 	}
 	error = Math.sqrt(error);
  

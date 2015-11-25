@@ -22,7 +22,7 @@ public class WindowModelTest {
 			DataIterator iter = new DataIterator("data/train");
 			data = iter.getNextSentences(3);
 			sentence = data.get(1);
-			model = new WindowModel(3, 1, 0.001);
+			model = new WindowModel(3, 1, 0.01, 0.001);
 			FeatureFactory.initializeVocab("data/vocab.txt");
 			FeatureFactory.readWordVectors("data/wordVectors.txt");
 		} catch (IOException e) {
