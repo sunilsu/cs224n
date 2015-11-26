@@ -3,7 +3,11 @@ package cs224n.deep;
 import static org.junit.Assert.*;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 
 import org.ejml.simple.SimpleMatrix;
 import org.junit.Before;
@@ -22,7 +26,7 @@ public class WindowModelTest {
 			DataIterator iter = new DataIterator("data/train");
 			data = iter.getNextSentences(3);
 			sentence = data.get(1);
-			model = new WindowModel(3, 1, 0.01, 0.001);
+			model = new WindowModel(3, 1, 0.01, 0.001, false);
 			FeatureFactory.initializeVocab("data/vocab.txt");
 			FeatureFactory.readWordVectors("data/wordVectors.txt");
 		} catch (IOException e) {
@@ -51,11 +55,23 @@ public class WindowModelTest {
 	}
 
 	@Test
-	public void testVetor() {
+	public void testVector() {
 		List<String> paddedSentence = model.pad(sentence);
 		List<List<String>> windows = model.window(paddedSentence);
 		List<String> window = windows.get(0);
 		System.out.println(model.toInputVector(window));
+	}
+	
+	@Test
+	public void testShuffle() {
+		List<String> a = Arrays.asList("a","b","c");
+		List<Integer> b = Arrays.asList(1,2,3);
+		Random seed = new Random();
+		seed.setSeed(System.nanoTime());
+		Collections.shuffle(a);
+		Collections.shuffle(b);
+		System.out.println(a);
+		System.out.println(b);
 	}
 
 }

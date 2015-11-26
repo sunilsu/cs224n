@@ -27,8 +27,10 @@ public class NER {
 	FeatureFactory.initializeVocab("data/vocab.txt");
 	FeatureFactory.readWordVectors("data/wordVectors.txt");
 
-	// initialize model 
-	WindowModel model = new WindowModel(5, 100, 0.01, 0.001);
+	// initialize model
+	//WindowModel model = new WindowModel(3, 2, 0.01, 0.0, true); // for gradient checks
+	WindowModel model = new WindowModel(3, 100, 0.01, 0.001, false);
+
 	model.initWeights();
 
 	model.train(trainData);

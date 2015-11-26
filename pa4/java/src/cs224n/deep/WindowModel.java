@@ -5,20 +5,21 @@ import java.lang.*;
 import java.util.*;
 
 import org.ejml.data.*;
+import org.ejml.ops.SpecializedOps;
 import org.ejml.simple.*;
 
 import java.text.*;
 
 public class WindowModel implements ObjectiveFunction {
 
-	protected SimpleMatrix L, W, U;
+	protected SimpleMatrix L, W, U, rW, rU;
 	//
 	protected int windowSize,wordSize, hiddenSize, outputNodes;
 	protected double lr;
 	protected static Map<String, Integer> labelToIndex = new HashMap<String, Integer>();
 	protected static Map<Integer, String> indexToLabel = new HashMap<Integer, String>();
 	private double C = 0.001;
-	private boolean checkGradient = false;
+	private boolean checkGradient;
 	
 	static {
 		labelToIndex.put("O", 0);
@@ -34,7 +35,7 @@ public class WindowModel implements ObjectiveFunction {
 
 	}
 	
-	public WindowModel(int _windowSize, int _hiddenSize, double _lr, double _C){
+	public WindowModel(int _windowSize, int _hiddenSize, double _lr, double _C, boolean check){
 		//TODO
 		windowSize = _windowSize; // assuming odd window size
 		hiddenSize = _hiddenSize;
@@ -42,6 +43,7 @@ public class WindowModel implements ObjectiveFunction {
 		outputNodes = 5; // number of NER outputs
 		lr = _lr;
 		C = _C;
+		checkGradient = check;
 	}
 	
 	private SimpleMatrix initRandom(int rows, int cols) {
@@ -63,6 +65,7 @@ public class WindowModel implements ObjectiveFunction {
 		W.setColumn(0, 0, zeros);
 		zeros = new double[U.numRows()];
 		U.setColumn(0, 0, zeros);
+		L = FeatureFactory.allVecs;
 		
 	}
 	
@@ -136,7 +139,7 @@ public class WindowModel implements ObjectiveFunction {
 				key = "UUUNKKK";
 			}
 			int index = FeatureFactory.wordToNum.get(key);
-			SimpleMatrix wordVec = FeatureFactory.allVecs.extractVector(false,
+			SimpleMatrix wordVec = L.extractVector(false,
 					index); // extract column vector at row=index
 			X.insertIntoThis(row, 0, wordVec);
 			row += wordVec.getNumElements(); // increment row to point to next
@@ -161,7 +164,7 @@ public class WindowModel implements ObjectiveFunction {
 			}
 			int index = FeatureFactory.wordToNum.get(key);
 			// update allVecs matrix for this word
-			FeatureFactory.allVecs.insertIntoThis(0, index, wordVec);
+			L.insertIntoThis(0, index, wordVec);
 		}
 	}
 	/**
@@ -187,7 +190,8 @@ public class WindowModel implements ObjectiveFunction {
 		SimpleMatrix tanhPrimeMat = new SimpleMatrix(mat.numRows(), mat.numCols());
 		for (int i=0; i<mat.numRows(); i++) {
 			for (int j=0; j<mat.numCols(); j++) {
-				double x = Math.pow(Math.tanh(mat.get(i, j)), 2.0);
+				double x = Math.tanh(mat.get(i, j));
+				x = x*x;
 				tanhPrimeMat.set(i, j, 1.0 - x);
 			}
 		}
@@ -199,19 +203,15 @@ public class WindowModel implements ObjectiveFunction {
 	 * @return softmax of mat elements
 	 */
 	public static SimpleMatrix softmax(SimpleMatrix mat) {
-		SimpleMatrix softmaxMat = new SimpleMatrix(mat.numRows(), mat.numCols());
-		for (int col=0; col < mat.numCols(); col++) {
-			double sum = 0.0;
-			for (int row=0; row < mat.numRows(); row++) {
-				softmaxMat.set(row, col, Math.exp(mat.get(row, col)));
-				sum += softmaxMat.get(row, col);
+		SimpleMatrix softmaxMat = new SimpleMatrix(mat);
+		for (int row=0; row < softmaxMat.numCols(); row++) {
+			for (int col=0; row < softmaxMat.numRows(); row++) {
+				softmaxMat.set(row, col, Math.exp(softmaxMat.get(row, col)));
 			}
 			//System.out.println("sum = " + sum);
-			for (int row=0; row < mat.numRows(); row++) {
-				softmaxMat.set(row, col, softmaxMat.get(row, col) / sum);
-			}
 		}
-		return softmaxMat;
+		double sum = softmaxMat.elementSum();
+		return softmaxMat.scale(1.0/sum);
 	}
 	/**
 	 * 
@@ -257,6 +257,10 @@ public class WindowModel implements ObjectiveFunction {
 		for (int i=0; i<Y.numRows(); i++) {
 			loss -= Y.get(i, 0) * Math.log(p.get(i, 0));
 		}
+		double r = SpecializedOps.elementSumSq(rW.getMatrix());
+		r += SpecializedOps.elementSumSq(rU.getMatrix());
+		r = C * r / 2.0;
+		loss += r;
 		return loss;
 	}
 	/**
@@ -265,7 +269,7 @@ public class WindowModel implements ObjectiveFunction {
 	 * @return matrix with the bias column zeroed out
 	 */
 	private SimpleMatrix zeroFirstColumn(SimpleMatrix mat) {
-		SimpleMatrix retMat = mat.copy();
+		SimpleMatrix retMat = new SimpleMatrix(mat);
 		double[] zeros = new double[mat.numRows()];
 		retMat.setColumn(0, 0, zeros);
 		return retMat;
@@ -283,14 +287,15 @@ public class WindowModel implements ObjectiveFunction {
 			inputWindows.addAll(window(paddedSentence));
 			labels.addAll(getLabels(sentence));
 		}
-		for (int epoch=0; epoch<10; epoch++) {
+		for (int epoch=0; epoch<5; epoch++) {
 			System.out.println("Epoch = " + epoch);
 			Random seed = new Random(System.nanoTime());
 			Collections.shuffle(inputWindows, seed);
 			Collections.shuffle(labels, seed);
 			for (int i=0; i<inputWindows.size(); i++) {
+				String label = labels.get(i);
 				List<String> window = inputWindows.get(i);
-				SimpleMatrix Y = getLabelMatrix(labels.get(i));
+				SimpleMatrix Y = getLabelMatrix(label);
 				SimpleMatrix X = toInputVector(window);
 				// feed forward
 				SimpleMatrix z1 = W.mult(X);
@@ -299,11 +304,15 @@ public class WindowModel implements ObjectiveFunction {
 				//System.out.println("p = " + p);
 
 				// loss
+				rU = zeroFirstColumn(U);
+				rW = zeroFirstColumn(W);
 				double J = logLoss(Y, p);
+				//System.out.println("J = " + J);
+
 				// calculate gradients
 				SimpleMatrix delta2 = p.minus(Y);
+				//System.out.println("delta2 = " + delta2);
 
-				SimpleMatrix rU = zeroFirstColumn(U);
 				SimpleMatrix dJdU = delta2.mult(a.transpose());
 				dJdU = dJdU.plus(rU.scale(C));
 				// calculate delta1
@@ -311,7 +320,6 @@ public class WindowModel implements ObjectiveFunction {
 				delta1 = delta1.extractMatrix(1, SimpleMatrix.END, 0, SimpleMatrix.END); // remove row 0 (bias part)
 				delta1 = delta1.elementMult(tanhPrime(z1)); // dJdZ1
 				//
-				SimpleMatrix rW = zeroFirstColumn(W);
 				SimpleMatrix dJdW = delta1.mult(X.transpose());
 				dJdW = dJdW.plus(rW.scale(C));
 				//
@@ -327,8 +335,10 @@ public class WindowModel implements ObjectiveFunction {
 					matrixDerivatives.add(dJdU);
 					matrixDerivatives.add(dJdW);
 					matrixDerivatives.add(dJdX);
-					System.out.println("check: " + 
-							GradientCheck.check(Y, weights, matrixDerivatives, this));
+					boolean check =
+							GradientCheck.check(Y, weights, matrixDerivatives, this);
+					System.out.println("check: " + check);
+					//if (!check) System.exit(-1);
 				}
 				// ************************
 				// update weights
