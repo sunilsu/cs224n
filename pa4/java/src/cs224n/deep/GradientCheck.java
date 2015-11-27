@@ -77,15 +77,15 @@ public class GradientCheck {
 	     else {
 		flops += (w.numRows() * w.numCols());
 	    }
-	    error += errFromMatrix(Y, w, dw, objFn, X);
-	    //System.out.println("i=" + i + "E= " + error);
+	    double err = errFromMatrix(Y, w, dw, objFn, X);
+	    error += err;
+	    //System.out.println("i=" + i + "E= " + err);
 	}
 	error = Math.sqrt(error);
  
 	System.out.println("Trial " + attempt++ + " Abs | Rel : "
 			   + error + " | " 
 			   + (error / (flops * 1.0)));
-	   
 	return error <= abs_threshold;
     }
 

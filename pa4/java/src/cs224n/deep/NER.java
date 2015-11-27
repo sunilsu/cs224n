@@ -28,8 +28,8 @@ public class NER {
 	FeatureFactory.readWordVectors("data/wordVectors.txt");
 
 	// initialize model
-	//WindowModel model = new WindowModel(3, 2, 0.01, 0.0, true); // for gradient checks
-	WindowModel model = new WindowModel(3, 100, 0.01, 0.001, false);
+	// WindowModel model = new WindowModel(3, 2, 0.3, 0.001, 1, true); // for gradient checks
+	WindowModel model = new WindowModel(5, 300, 0.05, 0.0001, 10, false);
 
 	model.initWeights();
 

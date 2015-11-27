@@ -20,6 +20,7 @@ public class WindowModel implements ObjectiveFunction {
 	protected static Map<Integer, String> indexToLabel = new HashMap<Integer, String>();
 	private double C = 0.001;
 	private boolean checkGradient;
+	private int Epochs;
 	
 	static {
 		labelToIndex.put("O", 0);
@@ -35,7 +36,7 @@ public class WindowModel implements ObjectiveFunction {
 
 	}
 	
-	public WindowModel(int _windowSize, int _hiddenSize, double _lr, double _C, boolean check){
+	public WindowModel(int _windowSize, int _hiddenSize, double _lr, double _C, int epochs, boolean check){
 		//TODO
 		windowSize = _windowSize; // assuming odd window size
 		hiddenSize = _hiddenSize;
@@ -43,12 +44,13 @@ public class WindowModel implements ObjectiveFunction {
 		outputNodes = 5; // number of NER outputs
 		lr = _lr;
 		C = _C;
+		Epochs = epochs;
 		checkGradient = check;
 	}
 	
 	private SimpleMatrix initRandom(int rows, int cols) {
-		double eInit = Math.sqrt(6.0) / Math.sqrt(cols + rows);// fanIn = cols, fanOut = rows
-		return SimpleMatrix.random(rows, cols, -eInit, eInit, new Random());
+		double eInit = Math.sqrt(6.0) / Math.sqrt(cols + rows -1);// fanIn = cols, fanOut = rows
+		return SimpleMatrix.random(rows, cols, -eInit, eInit, new Random(System.nanoTime()));
 	}
 
 	/**
@@ -204,9 +206,17 @@ public class WindowModel implements ObjectiveFunction {
 	 */
 	public static SimpleMatrix softmax(SimpleMatrix mat) {
 		SimpleMatrix softmaxMat = new SimpleMatrix(mat);
+		double max = mat.get(0,0);
 		for (int row=0; row < softmaxMat.numCols(); row++) {
 			for (int col=0; row < softmaxMat.numRows(); row++) {
-				softmaxMat.set(row, col, Math.exp(softmaxMat.get(row, col)));
+				if (softmaxMat.get(row, col) > max) {
+					max = softmaxMat.get(row, col);
+				}
+			}
+		}
+		for (int row=0; row < softmaxMat.numCols(); row++) {
+			for (int col=0; row < softmaxMat.numRows(); row++) {
+				softmaxMat.set(row, col, Math.exp(softmaxMat.get(row, col)-max));
 			}
 			//System.out.println("sum = " + sum);
 		}
@@ -251,18 +261,47 @@ public class WindowModel implements ObjectiveFunction {
 		}
 		return indexToLabel.get(index);
 	}
-	
-	public double logLoss(SimpleMatrix Y, SimpleMatrix p) {
+	/**
+	 * 
+	 * @param Y gold vector (one-hot)
+	 * @param p NN output vector
+	 * @return avg -ve log loss
+	 */
+	public double logloss(SimpleMatrix Y, SimpleMatrix p) {
 		double loss = 0.0;
-		for (int i=0; i<Y.numRows(); i++) {
-			loss -= Y.get(i, 0) * Math.log(p.get(i, 0));
+		int m = Y.numCols();
+		for (int k=0; k<m; k++) {
+			for (int i=0; i<Y.numRows(); i++) {
+				loss -= Y.get(i, k) * Math.log(p.get(i, k));
+			}
 		}
-		double r = SpecializedOps.elementSumSq(rW.getMatrix());
-		r += SpecializedOps.elementSumSq(rU.getMatrix());
-		r = C * r / 2.0;
-		loss += r;
+		loss = (1.0 / m) * loss;
 		return loss;
 	}
+	
+	/**
+	 * 
+	 * @return regularized cost
+	 */
+	public double regularizedCost() {
+		// add regularization cost
+		rU = zeroFirstColumn(U);
+		rW = zeroFirstColumn(W);
+		double r = SpecializedOps.elementSumSq(rW.getMatrix());
+		r += SpecializedOps.elementSumSq(rU.getMatrix());
+		return C * r / 2.0;
+	}
+	
+	/**
+	 * 
+	 * @param Y gold vector (one-hot)
+	 * @param p NN output vector
+	 * @return logloss + regularized cost
+	 */
+	public double cost(SimpleMatrix Y, SimpleMatrix p) {
+		return logloss(Y, p) + regularizedCost();
+	}
+	
 	/**
 	 * 
 	 * @param mat weight matrix with bias as first column
@@ -287,11 +326,13 @@ public class WindowModel implements ObjectiveFunction {
 			inputWindows.addAll(window(paddedSentence));
 			labels.addAll(getLabels(sentence));
 		}
-		for (int epoch=0; epoch<5; epoch++) {
+		for (int epoch=0; epoch<Epochs; epoch++) {
 			System.out.println("Epoch = " + epoch);
 			Random seed = new Random(System.nanoTime());
 			Collections.shuffle(inputWindows, seed);
 			Collections.shuffle(labels, seed);
+			double j = 0.0;
+			int accuracy = 0;
 			for (int i=0; i<inputWindows.size(); i++) {
 				String label = labels.get(i);
 				List<String> window = inputWindows.get(i);
@@ -302,17 +343,15 @@ public class WindowModel implements ObjectiveFunction {
 				SimpleMatrix a = extendVector(tanh(z1));
 				SimpleMatrix p = softmax(U.mult(a));
 				//System.out.println("p = " + p);
-
 				// loss
-				rU = zeroFirstColumn(U);
-				rW = zeroFirstColumn(W);
-				double J = logLoss(Y, p);
+				// j += logloss(Y, p);
 				//System.out.println("J = " + J);
 
 				// calculate gradients
 				SimpleMatrix delta2 = p.minus(Y);
 				//System.out.println("delta2 = " + delta2);
-
+				rU = zeroFirstColumn(U);
+				rW = zeroFirstColumn(W);
 				SimpleMatrix dJdU = delta2.mult(a.transpose());
 				dJdU = dJdU.plus(rU.scale(C));
 				// calculate delta1
@@ -347,6 +386,22 @@ public class WindowModel implements ObjectiveFunction {
 				X = X.minus(dJdX.scale(lr));
 				updateWordVecInLookup(window, X);
 			}
+			for (int i=0; i<inputWindows.size(); i++) {
+				String label = labels.get(i);
+				List<String> window = inputWindows.get(i);
+				SimpleMatrix Y = getLabelMatrix(label);
+				SimpleMatrix X = toInputVector(window);
+				SimpleMatrix p = feedForward(X);
+				String output = getOutput(p);
+				if (output.equals(label)) accuracy++;
+
+				j += logloss(Y, p);
+			}
+			j = j / inputWindows.size();
+			j += regularizedCost();
+			System.out.println("Total Cost = " + j);
+			System.out.println("Accuracy = " + ((float)accuracy)/inputWindows.size());
+
 		}
 
 	}
@@ -373,7 +428,7 @@ public class WindowModel implements ObjectiveFunction {
 	@Override
 	public double valueAt(SimpleMatrix label, SimpleMatrix input) {
 		SimpleMatrix p = feedForward(input);
-		return logLoss(label, p);
+		return cost(label, p);
 	}
 	
 }
