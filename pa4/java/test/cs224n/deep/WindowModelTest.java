@@ -1,4 +1,4 @@
-package cs224n.deep;
+	package cs224n.deep;
 
 import static org.junit.Assert.*;
 
@@ -66,10 +66,10 @@ public class WindowModelTest {
 	public void testShuffle() {
 		List<String> a = Arrays.asList("a","b","c");
 		List<Integer> b = Arrays.asList(1,2,3);
-		Random seed = new Random();
-		seed.setSeed(System.nanoTime());
-		Collections.shuffle(a);
-		Collections.shuffle(b);
+		Random seed = new Random(System.nanoTime());
+		
+		Collections.shuffle(a, seed);
+		Collections.shuffle(b, seed);
 		System.out.println(a);
 		System.out.println(b);
 	}

@@ -82,8 +82,9 @@ public class GradientCheck {
 	    //System.out.println("i=" + i + "E= " + err);
 	}
 	error = Math.sqrt(error);
- 
-	System.out.println("Trial " + attempt++ + " Abs | Rel : "
+	attempt++;
+	if (error > abs_threshold)
+		System.out.println("Trial " + attempt + " Abs | Rel : "
 			   + error + " | " 
 			   + (error / (flops * 1.0)));
 	return error <= abs_threshold;

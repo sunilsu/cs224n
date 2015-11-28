@@ -15,7 +15,7 @@ public class WindowModel implements ObjectiveFunction {
 	protected SimpleMatrix L, W, U, rW, rU;
 	//
 	protected int windowSize,wordSize, hiddenSize, outputNodes;
-	protected double lr;
+	protected double lr, lr_initial;
 	protected static Map<String, Integer> labelToIndex = new HashMap<String, Integer>();
 	protected static Map<Integer, String> indexToLabel = new HashMap<Integer, String>();
 	private double C = 0.001;
@@ -43,6 +43,7 @@ public class WindowModel implements ObjectiveFunction {
 		wordSize = 50; // 50 dim word vector
 		outputNodes = 5; // number of NER outputs
 		lr = _lr;
+		lr_initial = _lr;
 		C = _C;
 		Epochs = epochs;
 		checkGradient = check;
@@ -83,7 +84,7 @@ public class WindowModel implements ObjectiveFunction {
 	 * @param label
 	 * @return one hot encoded vector
 	 */
-	public SimpleMatrix getLabelMatrix(String label) {
+	public SimpleMatrix labelToOneHot(String label) {
 		int index = labelToIndex.get(label);
 		SimpleMatrix lmat = new SimpleMatrix(outputNodes, 1);
 		lmat.set(index, 1.0);
@@ -166,7 +167,10 @@ public class WindowModel implements ObjectiveFunction {
 			}
 			int index = FeatureFactory.wordToNum.get(key);
 			// update allVecs matrix for this word
+			//SimpleMatrix before = L.extractVector(false, index);
 			L.insertIntoThis(0, index, wordVec);
+			//SimpleMatrix after = L.extractVector(false, index);
+			//System.out.println(after.minus(before));
 		}
 	}
 	/**
@@ -193,8 +197,7 @@ public class WindowModel implements ObjectiveFunction {
 		for (int i=0; i<mat.numRows(); i++) {
 			for (int j=0; j<mat.numCols(); j++) {
 				double x = Math.tanh(mat.get(i, j));
-				x = x*x;
-				tanhPrimeMat.set(i, j, 1.0 - x);
+				tanhPrimeMat.set(i, j, 1.0 - x*x);
 			}
 		}
 		return tanhPrimeMat;
@@ -241,8 +244,10 @@ public class WindowModel implements ObjectiveFunction {
 	 */
 	public SimpleMatrix feedForward(SimpleMatrix X) {
 		SimpleMatrix z1 = W.mult(X);
-		SimpleMatrix a = extendVector(tanh(z1));
-		SimpleMatrix p = softmax(U.mult(a));
+		SimpleMatrix a = tanh(z1);
+		a = extendVector(a); // a = [1 a]'
+		SimpleMatrix z2 = U.mult(a);
+		SimpleMatrix p = softmax(z2);
 		return p;
 	}
 	/**
@@ -272,10 +277,13 @@ public class WindowModel implements ObjectiveFunction {
 		int m = Y.numCols();
 		for (int k=0; k<m; k++) {
 			for (int i=0; i<Y.numRows(); i++) {
-				loss -= Y.get(i, k) * Math.log(p.get(i, k));
+				if (Y.get(i, k) > 0) {
+					double p_ik = Math.max(p.get(i, k), 1E-7);
+					loss -= Y.get(i, k) * Math.log(p_ik);
+				}
 			}
 		}
-		loss = (1.0 / m) * loss;
+		loss = loss / m;
 		return loss;
 	}
 	
@@ -299,7 +307,10 @@ public class WindowModel implements ObjectiveFunction {
 	 * @return logloss + regularized cost
 	 */
 	public double cost(SimpleMatrix Y, SimpleMatrix p) {
-		return logloss(Y, p) + regularizedCost();
+		double lloss = logloss(Y,p);
+		double rloss = regularizedCost();
+		//System.out.println("lloss = " + lloss + ", rloss = " + rloss);
+		return lloss + rloss;
 	}
 	
 	/**
@@ -314,6 +325,25 @@ public class WindowModel implements ObjectiveFunction {
 		return retMat;
 	}
 
+	public void printStats(List<List<String>> inputWindows, List<String> labels) {
+		double j = 0.0;
+		int accuracy = 0;
+		for (int i=0; i<inputWindows.size(); i++) {
+			String label = labels.get(i);
+			List<String> window = inputWindows.get(i);
+			SimpleMatrix Y = labelToOneHot(label);
+			SimpleMatrix X = toInputVector(window);
+			SimpleMatrix p = feedForward(X);
+			String output = getOutput(p);
+			if (output.equals(label)) accuracy++;
+	
+			j += logloss(Y, p)*1/inputWindows.size();
+		}
+		j += regularizedCost();
+		System.out.println("Total Cost = " + j);
+		System.out.println("Accuracy = " + ((float)accuracy)/inputWindows.size());
+	}
+
 
 	/**
 	 * Simplest SGD training 
@@ -321,48 +351,58 @@ public class WindowModel implements ObjectiveFunction {
 	public void train(List<List<Datum>> _trainData ) {
 		List<List<String>> inputWindows = new ArrayList<List<String>>();
 		List<String> labels = new ArrayList<String>();
+		List<Integer> trainIndices = new ArrayList<Integer>();
 		for (List<Datum> sentence: _trainData) {
 			List<String> paddedSentence = pad(sentence);
 			inputWindows.addAll(window(paddedSentence));
 			labels.addAll(getLabels(sentence));
 		}
+		for (int i = 0; i < inputWindows.size(); i++) {
+			trainIndices.add(i);
+		}
+		int fails = 0;
+
 		for (int epoch=0; epoch<Epochs; epoch++) {
 			System.out.println("Epoch = " + epoch);
+			// shuffle inputs
 			Random seed = new Random(System.nanoTime());
-			Collections.shuffle(inputWindows, seed);
-			Collections.shuffle(labels, seed);
-			double j = 0.0;
-			int accuracy = 0;
-			for (int i=0; i<inputWindows.size(); i++) {
-				String label = labels.get(i);
-				List<String> window = inputWindows.get(i);
-				SimpleMatrix Y = getLabelMatrix(label);
+			Collections.shuffle(trainIndices, seed);
+			
+			for (int i=0; i<trainIndices.size(); i++) {
+				int ind = trainIndices.get(i);
+				String label = labels.get(ind);
+				List<String> window = inputWindows.get(ind);
+				SimpleMatrix Y = labelToOneHot(label);
 				SimpleMatrix X = toInputVector(window);
 				// feed forward
 				SimpleMatrix z1 = W.mult(X);
-				SimpleMatrix a = extendVector(tanh(z1));
-				SimpleMatrix p = softmax(U.mult(a));
+				SimpleMatrix a = tanh(z1);
+				a = extendVector(a); // a = [1 a]'
+				SimpleMatrix z2 = U.mult(a);
+				SimpleMatrix p = softmax(z2);
 				//System.out.println("p = " + p);
 				// loss
-				// j += logloss(Y, p);
-				//System.out.println("J = " + J);
+				//double J = cost(Y, p);
+				//System.out.println("J before = " + J);
 
 				// calculate gradients
-				SimpleMatrix delta2 = p.minus(Y);
+				SimpleMatrix delta2 = p.minus(Y); // d2 = [p -Y]
 				//System.out.println("delta2 = " + delta2);
-				rU = zeroFirstColumn(U);
-				rW = zeroFirstColumn(W);
-				SimpleMatrix dJdU = delta2.mult(a.transpose());
-				dJdU = dJdU.plus(rU.scale(C));
+				rU = zeroFirstColumn(U); // rU = [0 U] , zero bias column
+				rW = zeroFirstColumn(W); // rW = [0 W]
+				SimpleMatrix dJdU = delta2.mult(a.transpose()); // dU = d2 * a'
+				dJdU = dJdU.plus(rU.scale(C)); // dU = dU + C * [0 U]
 				// calculate delta1
-				SimpleMatrix delta1 = U.transpose().mult(delta2);
+				SimpleMatrix delta1 = U.transpose().mult(delta2); // d1 = U' * d2
+				// d1 = d1[2:, :]
 				delta1 = delta1.extractMatrix(1, SimpleMatrix.END, 0, SimpleMatrix.END); // remove row 0 (bias part)
-				delta1 = delta1.elementMult(tanhPrime(z1)); // dJdZ1
+				SimpleMatrix dadz1 = tanhPrime(z1); // dadz1 = (1 - (tanh(z1)**2)
+				delta1 = delta1.elementMult(dadz1); // d1 = (U' * d2)[2:] .* dadz1
 				//
-				SimpleMatrix dJdW = delta1.mult(X.transpose());
-				dJdW = dJdW.plus(rW.scale(C));
+				SimpleMatrix dJdW = delta1.mult(X.transpose()); // d1 * X'
+				dJdW = dJdW.plus(rW.scale(C)); // dW = dW + C * [0 W]
 				//
-				SimpleMatrix dJdX = W.transpose().mult(delta1);
+				SimpleMatrix dJdX = W.transpose().mult(delta1); // dX = W' * d1
 				// ***********************
 				//gradient check
 				if (checkGradient) {
@@ -376,8 +416,10 @@ public class WindowModel implements ObjectiveFunction {
 					matrixDerivatives.add(dJdX);
 					boolean check =
 							GradientCheck.check(Y, weights, matrixDerivatives, this);
-					System.out.println("check: " + check);
-					//if (!check) System.exit(-1);
+					if (!check) {
+						fails++;
+						System.out.println("check failed for " + window);
+					}
 				}
 				// ************************
 				// update weights
@@ -385,30 +427,22 @@ public class WindowModel implements ObjectiveFunction {
 				W = W.minus(dJdW.scale(lr));
 				X = X.minus(dJdX.scale(lr));
 				updateWordVecInLookup(window, X);
-			}
-			for (int i=0; i<inputWindows.size(); i++) {
-				String label = labels.get(i);
-				List<String> window = inputWindows.get(i);
-				SimpleMatrix Y = getLabelMatrix(label);
-				SimpleMatrix X = toInputVector(window);
-				SimpleMatrix p = feedForward(X);
-				String output = getOutput(p);
-				if (output.equals(label)) accuracy++;
 
-				j += logloss(Y, p);
+				// loss
+				//p = feedForward(X);
+				//J = J - cost(Y, p);
+				//System.out.println("J reduced by  = " + J);
 			}
-			j = j / inputWindows.size();
-			j += regularizedCost();
-			System.out.println("Total Cost = " + j);
-			System.out.println("Accuracy = " + ((float)accuracy)/inputWindows.size());
-
+			// check accuracy on training set
+			printStats(inputWindows, labels);
+			//lr = lr*0.9;
 		}
-
+		if (checkGradient) 	System.out.println("Total checks failed: " + fails);
 	}
 
 	
 	public void test(List<List<Datum>> testData) throws IOException {
-		FileWriter fw = new FileWriter("nn1.out");
+		FileWriter fw = new FileWriter("nn_" + lr_initial + "_" + C + ".out");
 		for (List<Datum> sentence : testData) {
 			List<String> paddedSentence = pad(sentence);
 			List<List<String>> windows = window(paddedSentence);
