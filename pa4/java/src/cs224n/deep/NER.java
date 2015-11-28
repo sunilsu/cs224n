@@ -24,13 +24,19 @@ public class NER {
 	
 	//	read the train and test data
 	//TODO: Implement this function (just reads in vocab and word vectors)
-	FeatureFactory.initializeVocab("data/vocab.txt");
-	FeatureFactory.readWordVectors("data/wordVectors.txt");
+	FeatureFactory.initializeVocab("../data/vocab.txt");
+	FeatureFactory.readWordVectors("../data/wordVectors.txt");
 
 	// initialize model
-	// WindowModel model = new WindowModel(3, 2, 0.3, 0.001, 1, true); // for gradient checks
-	WindowModel model = new WindowModel(5, 300, 0.05, 0.0001, 10, false);
-
+        // WindowModel model = new WindowModel(3, 2, 0.3, 0.001, 1, true); // for gradient checks
+	// WindowModel model = new WindowModel(5, 300, 0.05, 0.0001, 10, false);
+        
+         //use batches
+         WindowModel_Batch model = new WindowModel_Batch(5, 300, 1, 0.0001, 2, 2000, false);
+         
+        //use WindowModel_deeper 
+         //WindowModel_Deeper model = new WindowModel_Deeper(3, 2, 2,0.3, 0.001, 1, true); // for gradient checks
+       // WindowModel_deeper model = new WindowModel_deeper(5, 100,100, 0.05, 0.0001, 5, false);
 	model.initWeights();
 
 	model.train(trainData);
