@@ -336,26 +336,70 @@ public class WindowModel_Batch implements ObjectiveFunction {
 		return retMat;
 	}
 
+      private void printStats(List<List<String>> inputWindows, List<String>labels){
+          int TP = 0, FP = 0, FN = 0, T = 0;
+          double j = 0.0;   
+          int numWindows = inputWindows.size();
+          for (int i=0; i<inputWindows.size(); i++) {
+                  String label = labels.get(i);
+                  List<String> window = inputWindows.get(i);
+                  SimpleMatrix Y = getLabelMatrix(label);
+                  SimpleMatrix X = toInputVector(window);
+                  SimpleMatrix p = feedForward(X);
+                  String output = getOutput(p);
+                  if (!output.equals("O") && output.equals(label)) TP++;
+                  if (!output.equals("O") && !output.equals(label)) FP++;
+                  if (!output.equals(label) && label.equals("O")) FN++;
+                  if (!label.equals("O")) T++;
+                  j += logloss(Y, p)/inputWindows.size();
+                 /*
+                  if (i%(numWindows/10)==0){
+                      System.out.println("label = " + label);
+                      System.out.println("j = " + logloss(Y,p));
+                      p.print();
+                  }
+                 */
+          }
 
+          j +=  regularizedCost();
+          j = Math.round(j*1000)/1000.0;
+
+          //evaluate performance for each epoch
+          int TN = numWindows - T - FN;
+
+          double accuracy = Math.round((TP+TN) * 1.0/numWindows * 1000.0)/1000.0;
+          double precision = Math.round(TP * 1.0/(TP+FP)*1000)/1000.0;
+          double recall = Math.round(TP * 1.0/T*1000)/1000.0;
+          double f1 = Math.round(2*(precision * recall)/(precision + recall)*1000)/1000.0;
+          
+          System.out.println("actual phrases = " + T + ", found phrases = " + (TP+FP) + ", correct phrases = " + TP);
+          System.out.println("Accuracy = " +  accuracy +", Precision = " + precision +", Recall = " + recall + ", F1 = " + f1 );
+          System.out.println("Average Cost = " + j);
+          
+        }      
 	/**
 	 * Simplest SGD training 
 	 */
 	public void train(List<List<Datum>> _trainData ) {
 		List<List<String>> inputWindows = new ArrayList<List<String>>();
 		List<String> labels = new ArrayList<String>();
+                List<Integer> trainIndices = new ArrayList<Integer>();
 		for (List<Datum> sentence: _trainData) {
 			List<String> paddedSentence = pad(sentence);
 			inputWindows.addAll(window(paddedSentence));
 			labels.addAll(getLabels(sentence));
 		}
+                
+                for (int i = 0; i < inputWindows.size(); i++) {
+			trainIndices.add(i);
+		}
+		int fails = 0;
+                
 		for (int epoch=0; epoch<Epochs; epoch++) {
 			System.out.println("Epoch = " + epoch);
-			Random seed = new Random(System.nanoTime());
-                        //Random seed = new Random(10);
-			Collections.shuffle(inputWindows, seed);
-			Collections.shuffle(labels, seed);
-			double j = 0.0;
-			int TP = 0, FP = 0, FN = 0;
+			
+                        Random seed = new Random(System.nanoTime());
+                        Collections.shuffle(trainIndices, seed);
                         
                         int numWindows = inputWindows.size();
                         int numBatches = (int) Math.ceil(numWindows * 1.0/batchSize);
@@ -363,31 +407,33 @@ public class WindowModel_Batch implements ObjectiveFunction {
                         System.out.println("numWindows = " + numWindows);
                         System.out.println("numBatches = " + numBatches);
                         
-                        int windowId = 0;
+                        int windowInd = 0;
                         int actBatchSize;
                         SimpleMatrix dJdUAvg = new SimpleMatrix(U.numRows(),U.numCols());
                         SimpleMatrix dJdWAvg = new SimpleMatrix(W.numRows(),W.numCols());
                         
                         for (int k = 0; k<numBatches;k++){
-                            actBatchSize = batchSize;
-                            if (k == (numBatches - 1) && (numWindows%batchSize)>0){
-                                actBatchSize = numWindows % batchSize;
-                            }
+                                actBatchSize = batchSize;
+                                if (k == (numBatches - 1) && (numWindows%batchSize)>0){
+                                    actBatchSize = numWindows % batchSize;
+                                }
                                  for (int i=0; i<actBatchSize; i++) {
-                                        String label = labels.get(windowId);
-                                        List<String> window = inputWindows.get(windowId);
+                                        int ind = trainIndices.get(windowInd);
+                                        String label = labels.get(ind);
+                                        List<String> window = inputWindows.get(ind);
                                         SimpleMatrix Y = getLabelMatrix(label);
                                         SimpleMatrix X = toInputVector(window);
                                         // feed forward
                                         SimpleMatrix z1 = W.mult(X);
                                         SimpleMatrix a = extendVector(tanh(z1));
                                         SimpleMatrix p = softmax(U.mult(a));
-                                        
+                                        /*
                                         if ( k%(numBatches/10) == 0 && i < 10){
-                                           System.out.println("windowId = "+ windowId);
+                                           System.out.println("windowId = "+ windowInd);
                                            System.out.println("p = " + p);
                                            System.out.println("j = " + logloss(Y,p));
                                         }
+                                        */
                                         // calculate gradients
                                         SimpleMatrix delta2 = p.minus(Y);
                                         //System.out.println("delta2 = " + delta2);
@@ -408,6 +454,7 @@ public class WindowModel_Batch implements ObjectiveFunction {
                                         dJdWAvg = dJdWAvg.plus(dJdW.scale(1.0/actBatchSize));
                                         // ***********************
                                         //gradient check
+                                       //gradient check
                                         if (checkGradient) {
                                                 List<SimpleMatrix> weights = new ArrayList<SimpleMatrix>();
                                                 weights.add(U);
@@ -419,10 +466,16 @@ public class WindowModel_Batch implements ObjectiveFunction {
                                                 matrixDerivatives.add(dJdX);
                                                 boolean check =
                                                                 GradientCheck.check(Y, weights, matrixDerivatives, this);
-                                                System.out.println("check: " + check);
-                                                //if (!check) System.exit(-1);
+                                              
+                                                if (!check) {
+                                                System.out.println("check pass = " + check);
+						fails++;
+						System.out.println("check failed for " + window);
+                                                }
+                                             
+                                               
                                         }
-                                        windowId++;
+                                        windowInd++;
                                         //update weights for X
                                         X = X.minus(dJdX.scale(lr));
                                         updateWordVecInLookup(window, X);
@@ -438,41 +491,9 @@ public class WindowModel_Batch implements ObjectiveFunction {
                                         W = W.minus(dJdWAvg.scale(lr));
                                         
                         }
-                         j = 0.0;   
-			for (int i=0; i<inputWindows.size(); i++) {
-				String label = labels.get(i);
-				List<String> window = inputWindows.get(i);
-				SimpleMatrix Y = getLabelMatrix(label);
-				SimpleMatrix X = toInputVector(window);
-				SimpleMatrix p = feedForward(X);
-				String output = getOutput(p);
-                                 if (!output.equals("O") && output.equals(label)) TP++;
-                                if (!output.equals("O") && !output.equals(label)) FP++;
-                                if (!output.equals(label) && label.equals("O")) FN++;
-
-				j += logloss(Y, p)/inputWindows.size();
-                                
-                                if (i%(numWindows/10)==0){
-                                    System.out.println("label = " + label);
-                                    System.out.println("j = " + logloss(Y,p));
-                                    p.print();
-                                }
-			}
+                // check results on training set
+                 printStats(inputWindows, labels);
                         
-                        //evaluate performance for each epoch
-			int TN = numWindows - TP - FP - FN;
-			j += regularizedCost();
-                        
-                        //evaluate
-                        double accuracy = (TP+TN) * 1.0/numWindows;
-                        double precision = TP * 1.0/(TP+FP);
-                        double recall = TP * 1.0/(TP + FN);
-                        double f1 = 2*(precision * recall)/(precision * recall);
-                      
-			System.out.println("Total Cost = " + j);
-			System.out.println("Accuracy = " +  accuracy +", Precision = " + precision +", Recall = " + recall + ", F1 = " + f1 );
-                        System.out.println("actual phrases = " + (TP + FN) + ", found phrases = " + (TP+FP) + ", correct phrases = " + TP);
-
 		}
 
 	}
@@ -491,15 +512,28 @@ public class WindowModel_Batch implements ObjectiveFunction {
 				SimpleMatrix p = feedForward(X);
 				String output = getOutput(p);
 				fw.write(word + "\t" + label + "\t" + output + "\n");
-                                
+                               /* 
+                                //diagnostic check
                                 if (i%(windows.size()/10) == 0){
                                   System.out.println("label = " + label);
                                   p.print();
-                                  
                                 }
+                                       */
 			}
 		}
-		fw.close();
+                //eval the performance
+                List<List<String>> inputWindows = new ArrayList<List<String>>();
+		List<String> labels = new ArrayList<String>();
+ 		for (List<Datum> sentence: testData) {
+			List<String> paddedSentence = pad(sentence);
+			inputWindows.addAll(window(paddedSentence));
+			labels.addAll(getLabels(sentence));
+		}
+		
+                System.out.println("");
+                System.out.println("evaluate test data performance");
+                printStats(inputWindows,labels);
+                fw.close();
 	}
 
 	@Override

@@ -322,28 +322,75 @@ public class WindowModel_Deeper implements ObjectiveFunction {
 		return retMat;
 	}
 
+        private void printStats(List<List<String>> inputWindows, List<String>labels){
+          int TP = 0, FP = 0, FN = 0, T = 0;
+          double j = 0.0;   
+          int numWindows = inputWindows.size();
+          for (int i=0; i<inputWindows.size(); i++) {
+                  String label = labels.get(i);
+                  List<String> window = inputWindows.get(i);
+                  SimpleMatrix Y = getLabelMatrix(label);
+                  SimpleMatrix X = toInputVector(window);
+                  SimpleMatrix p = feedForward(X);
+                  String output = getOutput(p);
+                  if (!output.equals("O") && output.equals(label)) TP++;
+                  if (!output.equals("O") && !output.equals(label)) FP++;
+                  if (!output.equals(label) && label.equals("O")) FN++;
+                  if (!label.equals("O")) T++;
+                  j += logloss(Y, p)/inputWindows.size();
+                 /*
+                  if (i%(numWindows/10)==0){
+                      System.out.println("label = " + label);
+                      System.out.println("j = " + logloss(Y,p));
+                      p.print();
+                  }
+                 */
+          }
 
+          j +=  regularizedCost();
+          j = Math.round(j*1000)/1000.0;
+
+          //evaluate performance for each epoch
+          int TN = numWindows - T - FN;
+
+          double accuracy = Math.round((TP+TN) * 1.0/numWindows * 1000.0)/1000.0;
+          double precision = Math.round(TP * 1.0/(TP+FP)*1000)/1000.0;
+          double recall = Math.round(TP * 1.0/T*1000)/1000.0;
+          double f1 = Math.round(2*(precision * recall)/(precision + recall)*1000)/1000.0;
+          
+          System.out.println("actual phrases = " + T + ", found phrases = " + (TP+FP) + ", correct phrases = " + TP);
+          System.out.println("Accuracy = " +  accuracy +", Precision = " + precision +", Recall = " + recall + ", F1 = " + f1 );
+          System.out.println("Average Cost = " + j);
+          
+        }   
 	/**
 	 * Simplest SGD training 
 	 */
 	public void train(List<List<Datum>> _trainData ) {
 		List<List<String>> inputWindows = new ArrayList<List<String>>();
 		List<String> labels = new ArrayList<String>();
+                List<Integer> trainIndices = new ArrayList<Integer>();
+
 		for (List<Datum> sentence: _trainData) {
 			List<String> paddedSentence = pad(sentence);
 			inputWindows.addAll(window(paddedSentence));
 			labels.addAll(getLabels(sentence));
 		}
+                
+                for (int i = 0; i < inputWindows.size(); i++) {
+			trainIndices.add(i);
+		}
+		int fails = 0;
+                
 		for (int epoch=0; epoch<Epochs; epoch++) {
 			System.out.println("Epoch = " + epoch);
 			Random seed = new Random(System.nanoTime());
-			Collections.shuffle(inputWindows, seed);
-			Collections.shuffle(labels, seed);
-			double j = 0.0;
-			int accuracy = 0;
-			for (int i=0; i< inputWindows.size(); i++) {
-				String label = labels.get(i);
-				List<String> window = inputWindows.get(i);
+ 			Collections.shuffle(trainIndices, seed);
+			
+			for (int i=0; i<trainIndices.size(); i++) {
+				int ind = trainIndices.get(i);
+				String label = labels.get(ind);
+				List<String> window = inputWindows.get(ind);
 				SimpleMatrix Y = getLabelMatrix(label);
 				SimpleMatrix X = toInputVector(window);
 				// feed forward
@@ -395,8 +442,10 @@ public class WindowModel_Deeper implements ObjectiveFunction {
 					matrixDerivatives.add(dJdX);
 					boolean check =
 							GradientCheck.check(Y, weights, matrixDerivatives, this);
-					System.out.println("check: " + check);
-					//if (!check) System.exit(-1);
+					 if (!check) {
+						fails++;
+						System.out.println("check failed for " + window);
+					}
 				}
 				// ************************
 				// update weights
@@ -406,21 +455,8 @@ public class WindowModel_Deeper implements ObjectiveFunction {
 				X = X.minus(dJdX.scale(lr));
 				updateWordVecInLookup(window, X);
 			}
-			for (int i=0; i<inputWindows.size(); i++) {
-				String label = labels.get(i);
-				List<String> window = inputWindows.get(i);
-				SimpleMatrix Y = getLabelMatrix(label);
-				SimpleMatrix X = toInputVector(window);
-				SimpleMatrix p = feedForward(X);
-				String output = getOutput(p);
-				if (output.equals(label)) accuracy++;
-
-				j += logloss(Y, p);
-			}
-			j = j / inputWindows.size();
-			j += regularizedCost();
-			System.out.println("Total Cost = " + j);
-			System.out.println("Accuracy = " + ((float)accuracy)/inputWindows.size());
+			//eval the performance
+                        printStats(inputWindows,labels);
 
 		}
 
@@ -443,6 +479,21 @@ public class WindowModel_Deeper implements ObjectiveFunction {
                            
 			}
 		}
+                
+                //eval the performance
+                List<List<String>> inputWindows = new ArrayList<List<String>>();
+		List<String> labels = new ArrayList<String>();
+ 		for (List<Datum> sentence: testData) {
+			List<String> paddedSentence = pad(sentence);
+			inputWindows.addAll(window(paddedSentence));
+			labels.addAll(getLabels(sentence));
+		}
+		
+                //eval performance for test data
+                System.out.println("");
+                System.out.println("test data evaluation");
+                printStats(inputWindows,labels);
+                
 		fw.close();
 	}
 
