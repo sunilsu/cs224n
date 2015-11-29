@@ -1,4 +1,5 @@
 package cs224n.deep;
+import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.*;
@@ -434,7 +435,7 @@ public class WindowModel implements ObjectiveFunction {
 				//System.out.println("J reduced by  = " + J);
 			}
 			// check accuracy on training set
-			printStats(inputWindows, labels);
+			// printStats(inputWindows, labels);
 			//lr = lr*0.9;
 		}
 		if (checkGradient) 	System.out.println("Total checks failed: " + fails);
@@ -463,6 +464,20 @@ public class WindowModel implements ObjectiveFunction {
 	public double valueAt(SimpleMatrix label, SimpleMatrix input) {
 		SimpleMatrix p = feedForward(input);
 		return cost(label, p);
+	}
+	
+	public void saveWordVectors() throws IOException {
+		String outfile = "data/newVectors.txt";
+		BufferedWriter bw = new BufferedWriter(new FileWriter(outfile));
+		for (int col=0; col<L.numCols(); col++) {
+			StringBuilder sb = new StringBuilder();
+			for (int row=0; row<L.numRows(); row++) {
+				sb.append(L.get(row, col));
+				sb.append(" ");
+			}
+			sb.append("\n");
+			bw.write(sb.toString());
+		}
 	}
 	
 }
