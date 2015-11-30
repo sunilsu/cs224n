@@ -37,7 +37,7 @@ public class WindowModel_Batch implements ObjectiveFunction {
 
 	}
 	
-	public WindowModel_Batch(int _windowSize, int _hiddenSize, double _lr, double _C,  int epochs, int _batchSize, boolean check){
+	public WindowModel_Batch(int _windowSize, int _hiddenSize, double _lr, double _C,   int _batchSize, int epochs, boolean check){
 		//TODO
 		windowSize = _windowSize; // assuming odd window size
 		hiddenSize = _hiddenSize;
@@ -153,24 +153,7 @@ public class WindowModel_Batch implements ObjectiveFunction {
 		return X;
 	}
         
-        public SimpleMatrix toInputVector2(List<String> window) {
-		SimpleMatrix X = new SimpleMatrix(windowSize*wordSize +1, 1); // The first row = 1, to deal with bias
-  		int row = 0;
-		X.set(row++, 0, 1.0);
-		for (String word : window) {
-			String key = word.toLowerCase();
-			if (!FeatureFactory.wordToNum.containsKey(key)) {
-				key = "UUUNKKK";
-			}
-			int index = FeatureFactory.wordToNum.get(key);
-			SimpleMatrix wordVec = L.extractVector(false,
-					index); // extract column vector at row=index
-			X.insertIntoThis(row, 0, wordVec);
-			row += wordVec.getNumElements(); // increment row to point to next
-												// slot to insert
-		}
-		return X;
-	}
+         
 	/**
 	 * 
 	 * @param window input words in the window
@@ -409,10 +392,11 @@ public class WindowModel_Batch implements ObjectiveFunction {
                         
                         int windowInd = 0;
                         int actBatchSize;
-                        SimpleMatrix dJdUAvg = new SimpleMatrix(U.numRows(),U.numCols());
-                        SimpleMatrix dJdWAvg = new SimpleMatrix(W.numRows(),W.numCols());
                         
                         for (int k = 0; k<numBatches;k++){
+                                SimpleMatrix dJdUAvg = new SimpleMatrix(U.numRows(),U.numCols());
+                                SimpleMatrix dJdWAvg = new SimpleMatrix(W.numRows(),W.numCols());
+                                
                                 actBatchSize = batchSize;
                                 if (k == (numBatches - 1) && (numWindows%batchSize)>0){
                                     actBatchSize = numWindows % batchSize;
