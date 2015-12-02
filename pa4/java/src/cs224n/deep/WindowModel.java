@@ -443,7 +443,7 @@ public class WindowModel implements ObjectiveFunction {
 
 	
 	public void test(List<List<Datum>> testData) throws IOException {
-		FileWriter fw = new FileWriter("nn_" + lr_initial + "_" + C + ".out");
+		FileWriter fw = new FileWriter("nn_" + lr_initial + "_" + C + "_" + windowSize + "_" + Epochs  + "_" + hiddenSize + ".out");
 		for (List<Datum> sentence : testData) {
 			List<String> paddedSentence = pad(sentence);
 			List<List<String>> windows = window(paddedSentence);
