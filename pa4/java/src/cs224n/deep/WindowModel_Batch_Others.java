@@ -10,6 +10,7 @@
 
 package cs224n.deep;
 import java.io.FileWriter;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.lang.*;
 import java.util.*;
@@ -169,7 +170,7 @@ public class WindowModel_Batch_Others implements ObjectiveFunction {
          * @param window
          * @return 
          */
-        public SimpleMatrix toInputVector_CapInd(List<String> window) {
+        public SimpleMatrix toInputVector_capInd(List<String> window) {
 		SimpleMatrix X = new SimpleMatrix(vecLen, 1); // The first row = 1, to deal with bias
 		int row = 0;
 		X.set(row++, 0, 1.0);
@@ -654,7 +655,7 @@ public class WindowModel_Batch_Others implements ObjectiveFunction {
 
 	
 	public void test(List<List<Datum>> testData) throws IOException {
-		FileWriter fw = new FileWriter("nn1.out");
+		FileWriter fw = new FileWriter("nn_capMissInd.out");
 		for (List<Datum> sentence : testData) {
 			List<String> paddedSentence = pad(sentence);
 			List<List<String>> windows = window(paddedSentence);
@@ -694,6 +695,21 @@ public class WindowModel_Batch_Others implements ObjectiveFunction {
 	public double valueAt(SimpleMatrix label, SimpleMatrix input) {
 		SimpleMatrix p = feedForward(input);
 		return logloss(label, p);
+	}
+        
+        
+        public void saveWordVectors() throws IOException {
+		String outfile = "newVectors_capMissInd.txt";
+		BufferedWriter bw = new BufferedWriter(new FileWriter(outfile));
+		for (int col=0; col<L.numCols(); col++) {
+			StringBuilder sb = new StringBuilder();
+			for (int row=0; row<L.numRows(); row++) {
+				sb.append(L.get(row, col));
+				sb.append(" ");
+			}
+			sb.append("\n");
+			bw.write(sb.toString());
+		}
 	}
 	
 }
