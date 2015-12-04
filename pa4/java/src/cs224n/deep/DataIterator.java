@@ -51,6 +51,11 @@ public class DataIterator implements Iterator<List<Datum>> {
 		return data;
 	}
 	
+	@Override
+	public void remove() {
+		
+	}
+	
 	public List<List<Datum>> getNextSentences(int N) {
 		List<List<Datum>> sentences = new ArrayList<List<Datum>>();
 		int i = 0;
