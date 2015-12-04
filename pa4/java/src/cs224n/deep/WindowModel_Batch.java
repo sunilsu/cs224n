@@ -1,5 +1,6 @@
 package cs224n.deep;
 import java.io.FileWriter;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.lang.*;
 import java.util.*;
@@ -476,7 +477,7 @@ public class WindowModel_Batch implements ObjectiveFunction {
                                         
                         }
                 // check results on training set
-                 printStats(inputWindows, labels);
+                 //printStats(inputWindows, labels);
                         
 		}
 
@@ -484,7 +485,7 @@ public class WindowModel_Batch implements ObjectiveFunction {
 
 	
 	public void test(List<List<Datum>> testData) throws IOException {
-		FileWriter fw = new FileWriter("nn1.out");
+		FileWriter fw = new FileWriter("output/nnb_w" + windowSize + "_h" + hiddenSize + "_lr" + lr + "_c" + C +"_e" + Epochs +  ".out");;
 		for (List<Datum> sentence : testData) {
 			List<String> paddedSentence = pad(sentence);
 			List<List<String>> windows = window(paddedSentence);
@@ -524,6 +525,20 @@ public class WindowModel_Batch implements ObjectiveFunction {
 	public double valueAt(SimpleMatrix label, SimpleMatrix input) {
 		SimpleMatrix p = feedForward(input);
 		return logloss(label, p);
+	}
+        
+        public void saveWordVectors() throws IOException {
+		String outfile = "output/newVectors.txt";
+		BufferedWriter bw = new BufferedWriter(new FileWriter(outfile));
+		for (int col=0; col<L.numCols(); col++) {
+			StringBuilder sb = new StringBuilder();
+			for (int row=0; row<L.numRows(); row++) {
+				sb.append(L.get(row, col));
+				sb.append(" ");
+			}
+			sb.append("\n");
+			bw.write(sb.toString());
+		}
 	}
 	
 }
