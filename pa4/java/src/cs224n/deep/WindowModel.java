@@ -22,6 +22,7 @@ public class WindowModel implements ObjectiveFunction {
 	private double C = 0.001;
 	private boolean checkGradient;
 	private int Epochs;
+	private boolean randomWordVec = false;
 	
 	static {
 		labelToIndex.put("O", 0);
@@ -69,7 +70,14 @@ public class WindowModel implements ObjectiveFunction {
 		W.setColumn(0, 0, zeros);
 		zeros = new double[U.numRows()];
 		U.setColumn(0, 0, zeros);
-		L = FeatureFactory.allVecs;
+		if (randomWordVec) {
+			double eInit = Math.sqrt(6.0) / Math.sqrt(windowSize*wordSize+1);
+			L = SimpleMatrix.random(FeatureFactory.allVecs.numRows(), 
+					FeatureFactory.allVecs.numCols(), -eInit, eInit, new Random(System.nanoTime()));
+		}
+		else {
+			L = FeatureFactory.allVecs;
+		}
 		
 	}
 	
@@ -443,7 +451,9 @@ public class WindowModel implements ObjectiveFunction {
 
 	
 	public void test(List<List<Datum>> testData) throws IOException {
-		FileWriter fw = new FileWriter("nn_" + lr_initial + "_" + C + "_" + windowSize + "_" + Epochs  + "_" + hiddenSize + ".out");
+		String rnd = randomWordVec? "rnd":"nornd";
+		String filename = "nn_" + lr + "_" + C + "_" + windowSize + "_" + Epochs  + "_" + hiddenSize + "_" + rnd + ".out";
+		FileWriter fw = new FileWriter(filename);
 		for (List<Datum> sentence : testData) {
 			List<String> paddedSentence = pad(sentence);
 			List<List<String>> windows = window(paddedSentence);
@@ -468,6 +478,7 @@ public class WindowModel implements ObjectiveFunction {
 	
 	public void saveWordVectors() throws IOException {
 		String outfile = "data/newVectors.txt";
+		if (randomWordVec) outfile = "data/newRndVectors.txt";
 		BufferedWriter bw = new BufferedWriter(new FileWriter(outfile));
 		for (int col=0; col<L.numCols(); col++) {
 			StringBuilder sb = new StringBuilder();
