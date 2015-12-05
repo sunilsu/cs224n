@@ -287,7 +287,7 @@ public class WindowModel implements ObjectiveFunction {
 		for (int k=0; k<m; k++) {
 			for (int i=0; i<Y.numRows(); i++) {
 				if (Y.get(i, k) > 0) {
-					double p_ik = Math.max(p.get(i, k), 1E-7);
+					double p_ik = Math.max(p.get(i, k), 1E-10);
 					loss -= Y.get(i, k) * Math.log(p_ik);
 				}
 			}
