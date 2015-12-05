@@ -11,7 +11,7 @@ import org.ejml.simple.*;
 
 import java.text.*;
 
-public class WindowModel_Others implements ObjectiveFunction {
+public class WindowModel_Cap implements ObjectiveFunction {
 
 	protected SimpleMatrix L, W, U, rW, rU;
 	//
@@ -38,7 +38,7 @@ public class WindowModel_Others implements ObjectiveFunction {
 
 	}
 	
-	public WindowModel_Others(int _windowSize, int _hiddenSize, double _lr, double _C, int epochs, boolean check){
+	public WindowModel_Cap(int _windowSize, int _hiddenSize, double _lr, double _C, int epochs, boolean check){
 		//TODO
 		windowSize = _windowSize; // assuming odd window size
 		hiddenSize = _hiddenSize;
@@ -49,7 +49,7 @@ public class WindowModel_Others implements ObjectiveFunction {
 		C = _C;
 		Epochs = epochs;
 		checkGradient = check;
-                vecLen= windowSize * (wordSize+0) + 0 + 1;
+                vecLen= windowSize * wordSize + 2;
 	}
 	
 	private SimpleMatrix initRandom(int rows, int cols) {
@@ -130,36 +130,8 @@ public class WindowModel_Others implements ObjectiveFunction {
 		}
 		return windows;
 	}
-	/**
-	 * 
-	 * @param one window of sentence words
-	 * @return vector representation of of concatenated words in the window
-	 */
-	public SimpleMatrix toInputVector(List<String> window) {
-		SimpleMatrix X = new SimpleMatrix(vecLen, 1); // The first row = 1, to deal with bias
-		int row = 0;
-		X.set(row++, 0, 1.0);
-		for (String word : window) {
-			String key = word.toLowerCase();
-			if (!FeatureFactory.wordToNum.containsKey(key)) {
-				key = "UUUNKKK";
-			}
-			int index = FeatureFactory.wordToNum.get(key);
-			SimpleMatrix wordVec = L.extractVector(false,
-					index); // extract column vector at row=index
-			X.insertIntoThis(row, 0, wordVec);
-			row += wordVec.getNumElements(); // increment row to point to next
-												// slot to insert
-		}
-		return X;
-	}
-        
-        /**
-         * Add cap index for the center word
-         * @param window
-         * @return 
-         */
-        public SimpleMatrix toInputVector_capInd(List<String> window) {
+	 
+        public SimpleMatrix toInputVector_Cap(List<String> window) {
 		SimpleMatrix X = new SimpleMatrix(vecLen, 1); // The first row = 1, to deal with bias
 		int row = 0;
 		X.set(row++, 0, 1.0);
@@ -184,114 +156,7 @@ public class WindowModel_Others implements ObjectiveFunction {
                 
 		return X;
 	}
-	/**
-	 * Add a capitalized indicator for each word
-	 */
-        
-        public SimpleMatrix toInputVector_CapInd2(List<String> window) {
-		SimpleMatrix X = new SimpleMatrix(vecLen, 1); // The first row = 1, to deal with bias
-		int row = 0;
-		X.set(row++, 0, 1.0);
-		for (String word : window) {
-			String key = word.toLowerCase();
-			if (!FeatureFactory.wordToNum.containsKey(key)) {
-				key = "UUUNKKK";
-			}
-			int index = FeatureFactory.wordToNum.get(key);
-			SimpleMatrix wordVec = L.extractVector(false,
-					index); // extract column vector at row=index
-			X.insertIntoThis(row, 0, wordVec);
-                        row += wordVec.getNumElements() ;
-                        
-                        int cap = (word.equals(word.toLowerCase())) ? 0 : 1;
-                        SimpleMatrix capMat = new SimpleMatrix(1,1);
-                        capMat.set(0,0,cap);
-                        X.insertIntoThis(row, 0, capMat) ;
-			row++; // increment row to point to next
-												// slot to insert
-		}
-		return X;
-	}
-        /**
-         * Add a missing indicator for the center word
-         */
-        
-         public SimpleMatrix toInputVector_MissingInd(List<String> window) {
-		SimpleMatrix X = new SimpleMatrix(vecLen, 1); // The first row = 1, to deal with bias
-		int row = 0;
-		X.set(row++, 0, 1.0);
-		for (String word : window) {
-			String key = word.toLowerCase();
-			if (!FeatureFactory.wordToNum.containsKey(key)) {
-				key = "UUUNKKK";
-			}
-			int index = FeatureFactory.wordToNum.get(key);
-			SimpleMatrix wordVec = L.extractVector(false,
-					index); // extract column vector at row=index
-			X.insertIntoThis(row, 0, wordVec);
-			row += wordVec.getNumElements(); // increment row to point to next
-												// slot to insert
-		}
-                String centerWord = window.get(window.size()/2+1);
-                
-                String key = centerWord.toLowerCase();
-                int miss = 0;
-			if (!FeatureFactory.wordToNum.containsKey(key)) {
-				miss = 1;
-			}
-                SimpleMatrix missMat = new SimpleMatrix(1,1);
-                missMat.set(0,0,miss);
-                X.insertIntoThis(row, 0, missMat) ;
-                row++; // increment row to point to next
-                
-		return X;
-	}
-         
-         
-         /**
-         * Add both index for the center word
-         * @param window
-         * @return 
-         */
-        public SimpleMatrix toInputVector_capMissInd(List<String> window) {
-		SimpleMatrix X = new SimpleMatrix(vecLen, 1); // The first row = 1, to deal with bias
-		int row = 0;
-		X.set(row++, 0, 1.0);
-		for (String word : window) {
-			String key = word.toLowerCase();
-			if (!FeatureFactory.wordToNum.containsKey(key)) {
-				key = "UUUNKKK";
-			}
-			int index = FeatureFactory.wordToNum.get(key);
-			SimpleMatrix wordVec = L.extractVector(false,
-					index); // extract column vector at row=index
-			X.insertIntoThis(row, 0, wordVec);
-			row += wordVec.getNumElements(); // increment row to point to next
-												// slot to insert
-		}
-                String centerWord = window.get(window.size()/2+1);
-                //add cap indicator
-                int cap = (centerWord.equals(centerWord.toLowerCase())) ? 0 : 1;
-                SimpleMatrix capMat = new SimpleMatrix(1,1);
-                capMat.set(0,0,cap);
-                X.insertIntoThis(row, 0, capMat) ;
-                row++; // increment row to point to next                
-                
-                //add missing indicator
-                String key = centerWord.toLowerCase();
-                int miss = 0;
-			if (!FeatureFactory.wordToNum.containsKey(key)) {
-				miss = 1;
-			}
-                SimpleMatrix missMat = new SimpleMatrix(1,1);
-                missMat.set(0,0,miss);
-                X.insertIntoThis(row, 0, missMat) ;
-                row++; // increment row to point to next
-                
-		return X;
-	}
-        
-        
+	 
 	/**
 	 * 
 	 * @param window input words in the window
@@ -475,7 +340,7 @@ public class WindowModel_Others implements ObjectiveFunction {
                   String label = labels.get(i);
                   List<String> window = inputWindows.get(i);
                   SimpleMatrix Y = labelToOneHot(label);
-                  SimpleMatrix X = toInputVector(window);
+                  SimpleMatrix X = toInputVector_Cap(window);
                   SimpleMatrix p = feedForward(X);
                   String output = getOutput(p);
                   if (!output.equals("O") && output.equals(label)) TP++;
@@ -539,7 +404,7 @@ public class WindowModel_Others implements ObjectiveFunction {
 				String label = labels.get(ind);
 				List<String> window = inputWindows.get(ind);
 				SimpleMatrix Y = labelToOneHot(label);
-				SimpleMatrix X = toInputVector(window);
+				SimpleMatrix X = toInputVector_Cap(window);
 				// feed forward
 				SimpleMatrix z1 = W.mult(X);
 				SimpleMatrix a = tanh(z1);
@@ -591,8 +456,8 @@ public class WindowModel_Others implements ObjectiveFunction {
 				// update weights
 				U = U.minus(dJdU.scale(lr));
 				W = W.minus(dJdW.scale(lr));
-				//X = X.minus(dJdX.scale(lr));
-				//updateWordVecInLookup(window, X);
+				 X = X.minus(dJdX.scale(lr));
+				 updateWordVecInLookup(window, X);
 
 				// loss
 				//p = feedForward(X);
@@ -608,13 +473,13 @@ public class WindowModel_Others implements ObjectiveFunction {
 
 	
 	public void test(List<List<Datum>> testData) throws IOException {
-		FileWriter fw = new FileWriter("output/nn_notupdateX_w" + windowSize + "_h" + hiddenSize + "_lr" + lr + "_c" + C +"_e" + Epochs +  ".out");
+		FileWriter fw = new FileWriter("output/nn_miscapInd_w" + windowSize + "_h" + hiddenSize + "_lr" + lr + "_c" + C +"_e" + Epochs +  ".out");
 		for (List<Datum> sentence : testData) {
 			List<String> paddedSentence = pad(sentence);
 			List<List<String>> windows = window(paddedSentence);
 			for (int i=0; i<windows.size(); i++) {
 				List<String> window = windows.get(i);
-				SimpleMatrix X = toInputVector(window);
+				SimpleMatrix X = toInputVector_Cap(window);
 				String label = sentence.get(i).label;
 				String word = sentence.get(i).word;
 				SimpleMatrix p = feedForward(X);
