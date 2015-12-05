@@ -444,7 +444,7 @@ public class WindowModel implements ObjectiveFunction {
 			}
 			// check accuracy on training set
 			// printStats(inputWindows, labels);
-			//lr = lr*0.9;
+			lr = lr*0.9;
 		}
 		if (checkGradient) 	System.out.println("Total checks failed: " + fails);
 	}
